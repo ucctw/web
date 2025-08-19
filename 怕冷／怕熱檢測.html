@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>怕冷／怕熱傾向檢測</title>
+  <style>
+    :root{
+      --bg:#0b1220;--card:#121a2b;--muted:#8aa1c1;--text:#eef3ff;--acc:#6ea8fe;--good:#7bd389;--warn:#ffce6b;--hot:#ff8a7a;--cold:#7bbcff
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(70% 120% at 50% 0%, #122037 0%, var(--bg) 55%);color:var(--text);font:16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, Noto Sans TC, "Helvetica Neue", Arial}
+    .wrap{max-width:920px;margin:40px auto;padding:16px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.08);box-shadow:0 10px 30px rgba(0,0,0,.35);border-radius:20px;backdrop-filter: blur(3px)}
+    header{padding:28px}
+    h1{margin:0 0 8px;font-size:28px;letter-spacing:.5px}
+    .muted{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media (min-width: 860px){.grid{grid-template-columns:1fr 1fr}}
+    .q{padding:18px;border-radius:16px;background:var(--card);border:1px solid rgba(255,255,255,.06)}
+    .q h3{margin:0 0 12px;font-size:18px}
+    label{display:block;padding:10px 12px;margin:8px 0;border:1px solid rgba(255,255,255,.08);border-radius:12px;cursor:pointer;transition:.15s}
+    input[type=radio]{appearance:none;inline-size:18px;block-size:18px;border-radius:50%;border:2px solid var(--muted);display:inline-block;vertical-align:-3px;margin-right:8px;position:relative}
+    input[type=radio]:checked{border-color:var(--acc)}
+    label:hover{transform:translateY(-1px);border-color:var(--acc)}
+    .actions{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 0}
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:#1b2740;color:var(--text);cursor:pointer}
+    .btn.primary{background:linear-gradient(180deg, #2f6fef, #1d4ed8);border-color:#2f6fef}
+    .btn.ghost{background:transparent}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .result{padding:22px;border-top:1px dashed rgba(255,255,255,.2)}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.1);font-size:13px}
+    .tag-hot{background:rgba(255,138,122,.12);border-color:rgba(255,138,122,.4)}
+    .tag-cold{background:rgba(123,188,255,.12);border-color:rgba(123,188,255,.4)}
+    .tag-mix{background:rgba(255,206,107,.12);border-color:rgba(255,206,107,.4)}
+    .progress{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
+    .bar{height:100%;background:linear-gradient(90deg, var(--cold), var(--hot));width:50%}
+    details{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px 12px}
+    summary{cursor:pointer}
+    .small{font-size:13px}
+    footer{padding:18px 28px 28px}
+    .note{color:var(--muted);font-size:13px}
+    .credits{font-size:12px;color:var(--muted)}
+
+    /* 列印優化（下載成 PDF 會用到） */
+    @media print{
+      body{background:#fff;color:#000}
+      .wrap{box-shadow:none;border:none;margin:0;max-width:none}
+      .card, .q{background:#fff;border-color:#ddd}
+      header, footer{padding:12px 16px}
+      .actions, .note, .credits, #progressBar{display:none !important}
+      a[href]:after{content:""}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap card">
+    <header>
+      <h1>怕冷／怕熱傾向檢測 <span class="muted small">（6 題）</span></h1>
+      <p class="muted">依你平常狀況作答。系統會同時計算 <strong>❄️ 怕冷分</strong> 與 <strong>🔥 怕熱分</strong> 並給出分析與建議。</p>
+      <div class="progress" aria-hidden="true"><div class="bar" id="progressBar" style="width:0%"></div></div>
+    </header>
+
+    <main class="grid" id="quiz">
+      <!-- 問題會由 JS 動態插入 -->
+    </main>
+
+    <footer>
+      <div class="actions">
+        <button class="btn primary" id="calcBtn" disabled>計算結果</button>
+        <button class="btn" id="resetBtn">重填</button>
+        <button class="btn" id="pdfBtn" disabled>下載成 PDF</button>
+        <button class="btn ghost" id="copyBtn" disabled>複製結果</button>
+      </div>
+      <div class="result" id="result" hidden></div>
+      <p class="note">本測驗僅供一般健康與生活管理參考，若有長期畏寒、盜汗、甲狀腺相關症狀等不適，建議尋求專業醫療評估。</p>
+      <p class="credits">© 2025 檢測邏輯：❄️保溫（體脂、末梢循環）× 🔥產熱（代謝、肌肉）× 環境適應。</p>
+    </footer>
+  </div>
+
+  <script>
+  const QUESTIONS = [
+    {
+      id: 'q1',
+      title: '你的體型與體脂肪狀況？',
+      options: [
+        { text: '偏瘦、體脂低', cold: 2, hot: 0 },
+        { text: '體重正常、肌肉量高', cold: 0, hot: 1 },
+        { text: '體脂稍高（小腹、脂肪明顯）', cold: 1, hot: 1 },
+        { text: '體脂高（偏肉、容易流汗）', cold: 0, hot: 2 },
+      ]
+    },
+    {
+      id: 'q2',
+      title: '平常活動量／運動習慣？',
+      options: [
+        { text: '幾乎沒運動', cold: 2, hot: 0 },
+        { text: '偶爾運動（每週 1–2 次）', cold: 1, hot: 1 },
+        { text: '固定運動（每週 3 次以上）', cold: 0, hot: 2 },
+      ]
+    },
+    {
+      id: 'q3',
+      title: '手腳溫度狀況？',
+      options: [
+        { text: '常常冰冷，即使天氣不算冷', cold: 2, hot: 0 },
+        { text: '平常溫暖，但天冷時很快冰冷', cold: 1, hot: 0 },
+        { text: '幾乎不會手腳冰冷', cold: 0, hot: 1 },
+      ]
+    },
+    {
+      id: 'q4',
+      title: '夏天室外走一段路的感覺？',
+      options: [
+        { text: '很快就滿身大汗、心情煩躁', cold: 0, hot: 2 },
+        { text: '會熱，但能忍耐', cold: 0, hot: 1 },
+        { text: '幾乎不太流汗，還覺得還好', cold: 1, hot: 0 },
+      ]
+    },
+    {
+      id: 'q5',
+      title: '冬天沒開暖氣的室內（約 15°C）？',
+      options: [
+        { text: '坐一下就冷得發抖', cold: 2, hot: 0 },
+        { text: '有點冷，但加衣服還好', cold: 1, hot: 0 },
+        { text: '覺得舒適或偏熱', cold: 0, hot: 1 },
+      ]
+    },
+    {
+      id: 'q6',
+      title: '環境適應力？',
+      options: [
+        { text: '換季或溫差變化常不舒服（頭痛/鼻塞/疲倦）', cold: 1, hot: 1 },
+        { text: '溫差對你影響不大', cold: 0, hot: 0 },
+      ]
+    }
+  ];
+
+  const quizEl = document.getElementById('quiz');
+  const resultEl = document.getElementById('result');
+  const calcBtn = document.getElementById('calcBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const copyBtn = document.getElementById('copyBtn');
+  const pdfBtn = document.getElementById('pdfBtn');
+  const progressBar = document.getElementById('progressBar');
+
+  function render(){
+    quizEl.innerHTML = '';
+    QUESTIONS.forEach((q, qi) => {
+      const box = document.createElement('section');
+      box.className = 'q';
+      const h = document.createElement('h3');
+      h.textContent = `${qi+1}. ${q.title}`;
+      box.appendChild(h);
+
+      q.options.forEach((opt, oi) => {
+        const id = `${q.id}_${oi}`;
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = q.id;
+        input.id = id;
+        input.value = oi;
+        input.addEventListener('change', onChange);
+        label.htmlFor = id;
+        label.appendChild(input);
+        const t = document.createElement('span');
+        t.textContent = opt.text;
+        label.appendChild(t);
+        box.appendChild(label);
+      });
+
+      quizEl.appendChild(box);
+    });
+  }
+
+  function answeredCount(){
+    return QUESTIONS.reduce((n,q)=> n + (document.querySelector(`input[name="${q.id}"]:checked`) ? 1 : 0), 0);
+  }
+
+  function onChange(){
+    const total = QUESTIONS.length;
+    const done = answeredCount();
+    const pct = Math.round(done/total*100);
+    progressBar.style.width = pct + '%';
+    calcBtn.disabled = done !== total;
+    copyBtn.disabled = true;
+    pdfBtn.disabled = true;
+    resultEl.hidden = true;
+  }
+
+  function calc(){
+    let cold=0, hot=0; const picks = [];
+    QUESTIONS.forEach(q =>{
+      const checked = document.querySelector(`input[name="${q.id}"]:checked`);
+      if(!checked) return;
+      const opt = q.options[+checked.value];
+      cold += opt.cold; hot += opt.hot;
+      picks.push({q:q.title, a:opt.text});
+    });
+
+    const verdict = getVerdict(cold, hot);
+    const summary = renderSummary(cold, hot, verdict, picks);
+    resultEl.innerHTML = summary;
+    resultEl.hidden = false;
+    copyBtn.disabled = false;
+    pdfBtn.disabled = false;
+  }
+
+  function getVerdict(cold, hot){
+    if (hot - cold >= 2) return {type:'hot', title:'偏怕熱體質 🔥', tip: [
+      '夏天外出避開高溫時段，穿著透氣速乾衣物',
+      '補充水分與電解質，預防中暑',
+      '睡前避免高強度運動與辛辣高溫飲食',
+      '室內可提高風速（電扇）搭配較低冷氣設定溫度'
+    ]};
+    if (cold - hot >= 2) return {type:'cold', title:'偏怕冷體質 ❄️', tip: [
+      '規律肌力與有氧訓練，提升產熱',
+      '攝取足夠蛋白質與全食物，避免過度節食',
+      '注意末梢保暖（襪子、手套），適度熱飲',
+      '靜態久坐時定時活動，促進循環'
+    ]};
+    return {type:'mix', title:'混合／中間型 🟡', tip: [
+      '依季節彈性調整衣著與環境設定',
+      '夏天重視散熱與補水；冬天強化保暖與活動',
+      '留意睡眠前體溫調節（避免過熱/過冷）'
+    ]};
+  }
+
+  function renderSummary(cold, hot, verdict, picks){
+    const total = cold + hot || 1;
+    const hotPct = Math.round(hot/total*100);
+    const coldPct = 100 - hotPct;
+    const tagClass = verdict.type==='hot' ? 'tag-hot' : verdict.type==='cold' ? 'tag-cold' : 'tag-mix';
+
+    const tips = verdict.tip.map(t => `<li>${t}</li>`).join('');
+    const answers = picks.map((p,i)=>`<li><strong>${i+1}.</strong> ${p.q}：<em>${p.a}</em></li>`).join('');
+
+    return `
+      <p class="pill ${tagClass}"><strong>${verdict.title}</strong></p>
+      <p class="muted">你的計分：❄️ <strong>${cold}</strong> 分、🔥 <strong>${hot}</strong> 分（熱 ${hotPct}%｜冷 ${coldPct}%）</p>
+      <details open><summary><strong>重點建議</strong></summary>
+        <ul>${tips}</ul>
+      </details>
+      <details><summary><strong>你的作答摘要</strong></summary>
+        <ul class="small">${answers}</ul>
+      </details>
+    `;
+  }
+
+  function resetAll(){
+    document.querySelectorAll('input[type=radio]').forEach(el=> el.checked=false);
+    progressBar.style.width = '0%';
+    calcBtn.disabled = true; resultEl.hidden = true; copyBtn.disabled = true; pdfBtn.disabled = true;
+  }
+
+  function copyResult(){
+    const text = resultEl.innerText.trim();
+    if(!text){return}
+    navigator.clipboard.writeText(text).then(()=>{
+      copyBtn.textContent = '已複製！';
+      setTimeout(()=> copyBtn.textContent = '複製結果', 1500);
+    });
+  }
+
+  calcBtn.addEventListener('click', calc);
+  resetBtn.addEventListener('click', resetAll);
+  copyBtn.addEventListener('click', copyResult);
+  pdfBtn.addEventListener('click', () => window.print());
+
+  render();
+  </script>
+</body>
+</html>
